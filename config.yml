@@ -1,0 +1,7 @@
+---
+
+is_debug: true
+token:
+  salt: # h1$2Ej#jd5e23jkl2F
+listen:
+  port: 8626 # If 0 then automatic port selection
