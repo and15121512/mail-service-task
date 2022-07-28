@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"os"
 
 	"gitlab.com/sukharnikov.aa/mail-service-task/internal/domain/models"
 	"gitlab.com/sukharnikov.aa/mail-service-task/internal/utils"
@@ -52,12 +51,55 @@ func (db *DataFile) InsertTask(ctx context.Context, task models.Task) error {
 	return nil
 }
 
-func (db *DataFile) read(ctx context.Context) ([]models.Task, error) {
+func (db *DataFile) GetTask(ctx context.Context, task_id string) (models.Task, error) {
 	logger := db.annotatedLogger(ctx)
 
-	if _, err := os.Stat("data_files/tasks.json"); err == nil {
-		return []models.Task{}, nil
+	tasks, err := db.read(ctx)
+	if err != nil {
+		logger.Errorf("failed to get task in data file: cannot read data file")
+		return models.Task{}, fmt.Errorf("failed to get task in data file: cannot read data file")
 	}
+
+	searched_task := models.Task{}
+	for _, curr_task := range tasks {
+		if curr_task.ID == task_id {
+			searched_task = curr_task
+		}
+	}
+	return searched_task, nil
+}
+
+func (db *DataFile) UpdateTask(ctx context.Context, newTask models.Task) error {
+	logger := db.annotatedLogger(ctx)
+
+	tasks, err := db.read(ctx)
+	if err != nil {
+		logger.Errorf("failed to get task in data file: cannot read data file")
+		return fmt.Errorf("failed to get task in data file: cannot read data file")
+	}
+
+	found := false
+	for i, curr_task := range tasks {
+		if curr_task.ID == newTask.ID {
+			found = true
+			tasks[i] = newTask
+			break
+		}
+	}
+	if !found {
+		logger.Errorf("no task found with fask ID %s", newTask.ID)
+		return fmt.Errorf("no task found with fask ID %s", newTask.ID)
+	}
+	err = db.write(ctx, tasks)
+	if err != nil {
+		logger.Errorf("failed to update task in data file: cannot write data file")
+		return fmt.Errorf("failed to update task in data file: cannot write data file")
+	}
+	return nil
+}
+
+func (db *DataFile) read(ctx context.Context) ([]models.Task, error) {
+	logger := db.annotatedLogger(ctx)
 
 	file, err := ioutil.ReadFile("data_files/tasks.json")
 	if err != nil {

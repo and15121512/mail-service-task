@@ -15,14 +15,14 @@ import (
 
 type Service struct {
 	ts     ports.TaskStorage
-	mail   ports.Mail
+	m      ports.Mail
 	logger *zap.SugaredLogger
 }
 
-func New(ts ports.TaskStorage, mail ports.Mail, logger *zap.SugaredLogger) *Service {
+func New(ts ports.TaskStorage, m ports.Mail, logger *zap.SugaredLogger) *Service {
 	return &Service{
 		ts:     ts,
-		mail:   mail,
+		m:      m,
 		logger: logger,
 	}
 }
@@ -60,13 +60,130 @@ func (s *Service) CreateTask(ctx context.Context, task models.Task) (models.Task
 	if len(task.Logins) == 0 {
 		return task, nil
 	}
-	s.mail.SendApprovalMail(ctx, models.MailToApproval{
+	s.m.SendApprovalMail(ctx, models.MailToApproval{
 		Destination:  task.Logins[0],
 		ApprovalLink: s.generateApprovalLink(task.ID, approvalTokens[0]),
 		DeclineLink:  s.generateDeclineLink(task.ID, approvalTokens[0]),
 	})
 
 	return task, nil
+}
+
+func (s *Service) GetTask(ctx context.Context, task_id string) (models.Task, error) {
+	return s.ts.GetTask(ctx, task_id)
+}
+
+func (s *Service) UpdateTask(ctx context.Context, newTask models.Task, user models.User) error {
+	logger := s.annotatedLogger(ctx)
+
+	oldTask, err := s.ts.GetTask(ctx, newTask.ID)
+	if err != nil {
+		logger.Errorf("failed to get task with task ID %s for update", newTask.ID)
+		return fmt.Errorf("failed to get task with task ID %s for update", newTask.ID)
+	}
+	if user.Login != oldTask.InitiatorLogin {
+		logger.Errorf("user %s is not the task %s author", user.Login, oldTask.ID)
+		return fmt.Errorf("user %s is not the task %s author", user.Login, oldTask.ID)
+	}
+
+	approvalTokens := make([]string, len(newTask.Logins))
+	for i, login := range newTask.Logins {
+		approvalTokens[i] = s.generateToken(ctx, newTask.ID, login)
+	}
+	newTask.ApprovalTokens = approvalTokens
+	newTask.InitiatorLogin = oldTask.InitiatorLogin
+	newTask.CurrApprovalNum = 0
+	newTask.Status = models.TaskInProgressStatus
+
+	err = s.ts.UpdateTask(ctx, newTask)
+	if err != nil {
+		logger.Errorf("failed to update task with task ID %s", newTask.ID)
+		return fmt.Errorf("failed to update task with task ID %s", newTask.ID)
+	}
+
+	s.m.SendResultMail(ctx, models.ResultMail{
+		Destinations: oldTask.Logins,
+		TaskID:       oldTask.ID,
+		Result:       "task was updated",
+	})
+
+	if len(newTask.Logins) == 0 {
+		return nil
+	}
+	s.m.SendApprovalMail(ctx, models.MailToApproval{
+		Destination:  newTask.Logins[0],
+		ApprovalLink: s.generateApprovalLink(newTask.ID, approvalTokens[0]),
+		DeclineLink:  s.generateDeclineLink(newTask.ID, approvalTokens[0]),
+	})
+	return nil
+}
+
+func (s *Service) ApproveOrDecline(ctx context.Context, task_id string, token string, decision string) error {
+	logger := s.annotatedLogger(ctx)
+
+	task, err := s.ts.GetTask(ctx, task_id)
+	if err != nil {
+		logger.Errorf("failed to get task with task ID %s", task_id)
+		return fmt.Errorf("failed to get task with task ID %s", task_id)
+	}
+
+	if task.ApprovalTokens[task.CurrApprovalNum] != token {
+		logger.Errorf("invalid approval token")
+		return fmt.Errorf("invalid approval token")
+	}
+
+	if decision == "approve" {
+		err = s.approve(ctx, &task)
+	} else if decision == "decline" {
+		err = s.decline(ctx, &task)
+	} else {
+		logger.Errorf("invalid decision value (expected 'approve' or 'decline')")
+		return fmt.Errorf("invalid decision value (expected 'approve' or 'decline')")
+	}
+	if err != nil {
+		logger.Errorf("failed to process approve/decline: %s", err.Error())
+		return fmt.Errorf("failed to process approve/decline: %s", err.Error())
+	}
+
+	err = s.ts.UpdateTask(ctx, task)
+	if err != nil {
+		logger.Errorf("failed to update task with task ID %s", task.ID)
+		return fmt.Errorf("failed to update task with task ID %s", task.ID)
+	}
+
+	return nil
+}
+
+func (s *Service) approve(ctx context.Context, task *models.Task) error {
+	task.CurrApprovalNum++
+	if task.CurrApprovalNum >= len(task.Logins) {
+		task.Status = models.TaskDoneStatus
+		s.m.SendResultMail(ctx, models.ResultMail{
+			Destinations: task.Logins,
+			TaskID:       task.ID,
+			Result:       "task was done",
+		})
+	} else {
+		if len(task.Logins) == 0 {
+			return fmt.Errorf("logins array of the task %s is empty", task.ID)
+		}
+		s.m.SendApprovalMail(ctx, models.MailToApproval{
+			Destination:  task.Logins[task.CurrApprovalNum],
+			ApprovalLink: s.generateApprovalLink(task.ID, task.ApprovalTokens[task.CurrApprovalNum]),
+			DeclineLink:  s.generateDeclineLink(task.ID, task.ApprovalTokens[task.CurrApprovalNum]),
+		})
+	}
+	return nil
+}
+
+func (s *Service) decline(ctx context.Context, task *models.Task) error {
+	task.Status = models.TaskDeclinedStatus
+	s.m.SendResultMail(ctx, models.ResultMail{
+		Destinations: task.Logins,
+		TaskID:       task.ID,
+		Result:       "task was cancelled",
+	})
+	return nil
 }
 
 func (s *Service) generateToken(ctx context.Context, task_id string, login string) string {

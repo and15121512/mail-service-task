@@ -2,6 +2,6 @@ package models
 
 type ResultMail struct {
 	Destinations []string
-	TaskID       int
+	TaskID       string
 	Result       string
 }
