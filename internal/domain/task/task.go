@@ -118,6 +118,34 @@ func (s *Service) UpdateTask(ctx context.Context, newTask models.Task, user mode
 	return nil
 }
 
+func (s *Service) DeleteTask(ctx context.Context, task_id string, user models.User) error {
+	logger := s.annotatedLogger(ctx)
+
+	task, err := s.ts.GetTask(ctx, task_id)
+	if err != nil {
+		logger.Errorf("failed to get task with task ID %s for update", task_id)
+		return fmt.Errorf("failed to get task with task ID %s for update", task_id)
+	}
+	if user.Login != task.InitiatorLogin {
+		logger.Errorf("user %s is not the task %s author", user.Login, task_id)
+		return fmt.Errorf("user %s is not the task %s author", user.Login, task_id)
+	}
+
+	err = s.ts.DeleteTask(ctx, task_id)
+	if err != nil {
+		logger.Errorf("failed to delete task with task ID %s", task_id)
+		return fmt.Errorf("failed to delete task with task ID %s", task_id)
+	}
+
+	s.m.SendResultMail(ctx, models.ResultMail{
+		Destinations: task.Logins,
+		TaskID:       task.ID,
+		Result:       "task was deleted",
+	})
+
+	return nil
+}
+
 func (s *Service) ApproveOrDecline(ctx context.Context, task_id string, token string, decision string) error {
 	logger := s.annotatedLogger(ctx)
 

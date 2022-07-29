@@ -18,6 +18,7 @@ func (s *Server) taskHandlers() http.Handler {
 	r.With(s.AnnotateContext()).With(s.ValidateAuth()).Post("/tasks", s.CreateTask)
 	r.With(s.AnnotateContext()).With(s.ValidateAuth()).Get("/tasks/{task_id}", s.GetTask)
 	r.With(s.AnnotateContext()).With(s.ValidateAuth()).Post("/tasks/{task_id}", s.UpdateTask)
+	r.With(s.AnnotateContext()).With(s.ValidateAuth()).Delete("/tasks/{task_id}", s.DeleteTask)
 
 	r.With(s.AnnotateContext()).With(s.ValidateAuth()).Post("/tasks/{task_id}/approve", s.ApproveOrDecline)
 
@@ -178,7 +179,36 @@ func (s *Server) UpdateTask(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func DeleteTask(w http.ResponseWriter, r *http.Request) {
+func (s *Server) DeleteTask(w http.ResponseWriter, r *http.Request) {
+	logger := s.annotatedLogger(r.Context())
+
+	task_id := chi.URLParam(r, "task_id")
+	if task_id == "" {
+		utils.ResponseJSON(w, http.StatusNotFound, map[string]string{
+			"error": "No task ID provided in URL for delete task request",
+		})
+		logger.Errorf("No task ID provided in URL for delete task request")
+		return
+	}
+
+	user, ok := r.Context().Value(ctxKeyUser{}).(*models.User)
+	if !ok {
+		utils.ResponseJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "failed to extract token from request",
+		})
+		logger.Errorf("failed to extract token from request")
+		return
+	}
+
+	err := s.task.DeleteTask(r.Context(), task_id, *user)
+	if err != nil {
+		utils.ResponseJSON(w, http.StatusBadRequest, map[string]string{
+			"error": fmt.Sprintf("failed to delete task requested by login %s; are you the task author?", user.Login),
+		})
+		logger.Errorf("failed to delete task requested by login %s", user.Login)
+		return
+	}
+	utils.ResponseJSON(w, http.StatusOK, map[string]string{})
 }
 
 func ListTasks(w http.ResponseWriter, r *http.Request) {

@@ -98,6 +98,40 @@ func (db *DataFile) UpdateTask(ctx context.Context, newTask models.Task) error {
 	return nil
 }
 
+func (db *DataFile) DeleteTask(ctx context.Context, task_id string) error {
+	logger := db.annotatedLogger(ctx)
+
+	tasks, err := db.read(ctx)
+	if err != nil {
+		logger.Errorf("failed to delete task in data file: cannot read data file")
+		return fmt.Errorf("failed to delete task in data file: cannot read data file")
+	}
+
+	idx := -1
+	for i, curr_task := range tasks {
+		if curr_task.ID == task_id {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		logger.Errorf("no task found with fask ID %s", task_id)
+		return fmt.Errorf("no task found with fask ID %s", task_id)
+	}
+
+	copy(tasks[idx:], tasks[idx+1:])
+	tasks[len(tasks)-1] = models.Task{}
+	tasks = tasks[:len(tasks)-1]
+
+	err = db.write(ctx, tasks)
+	if err != nil {
+		logger.Errorf("failed to delete task in data file: cannot write data file")
+		return fmt.Errorf("failed to delete task in data file: cannot write data file")
+	}
+
+	return nil
+}
+
 func (db *DataFile) read(ctx context.Context) ([]models.Task, error) {
 	logger := db.annotatedLogger(ctx)
 
