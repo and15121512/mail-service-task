@@ -5,9 +5,9 @@ import (
 	"fmt"
 
 	"github.com/TheZeroSlave/zapsentry"
-	"gitlab.com/sukharnikov.aa/mail-service-task/internal/adapters/data_file"
 	"gitlab.com/sukharnikov.aa/mail-service-task/internal/adapters/http"
 	"gitlab.com/sukharnikov.aa/mail-service-task/internal/adapters/mail"
+	"gitlab.com/sukharnikov.aa/mail-service-task/internal/adapters/mongodb"
 	"gitlab.com/sukharnikov.aa/mail-service-task/internal/domain/task"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -51,10 +51,16 @@ func Start(ctx context.Context) {
 	//defer sentryClient.Flush(2 * time.Second)
 	logger = modifyToSentryLogger(logger, "http://b7dd7b3ce3df4f2b81f5af622512658c@localhost:9000/2")
 
-	db, err := data_file.New(logger.Sugar()) // Mock!!!
+	db, disconn, err := mongodb.New(ctx, "mongodb://mongo-db-task:27017/", "task", "task", logger.Sugar())
+	defer disconn()
 	if err != nil {
-		logger.Sugar().Fatalf("db init failed: %s", err)
+		logger.Sugar().Fatalf("mongodb init failed: %s", err)
 	}
+
+	//db, err := data_file.New(logger.Sugar()) // Mock!!!
+	//if err != nil {
+	//	logger.Sugar().Fatalf("db init failed: %s", err)
+	//}
 	m := mail.New(logger.Sugar())
 
 	taskS := task.New(db, m, logger.Sugar())

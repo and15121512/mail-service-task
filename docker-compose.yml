@@ -1,0 +1,22 @@
+---
+
+version: "3"
+
+services:
+  mail-service-task:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - 8626:8626
+    depends_on:
+      - mongo-db
+
+  mongo-db-task:
+    image:
+      mongo:latest
+    volumes:
+      - ./configs/mongod.conf:/etc/mongod.conf
+    ports:
+      - 27017:27017
+    command: --config /etc/mongod.conf
