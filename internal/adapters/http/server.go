@@ -27,7 +27,7 @@ func New(task ports.Task, logger *zap.SugaredLogger) (*Server, error) {
 		s   Server
 	)
 	s.logger = logger
-	s.l, err = net.Listen("tcp", ":"+config.GetConfig(logger).Listen.Port)
+	s.l, err = net.Listen("tcp", ":"+config.GetConfig(logger).Ports.HttpPort)
 	if err != nil {
 		logger.Fatalf("Failed listen port: %s", err)
 	}

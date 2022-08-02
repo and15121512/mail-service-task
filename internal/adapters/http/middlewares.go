@@ -2,6 +2,8 @@ package http
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/middleware"
@@ -21,7 +23,7 @@ func (s *Server) ValidateAuth() func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			logger := s.annotatedLogger(r.Context())
 
-			accessToken, err := r.Cookie("access")
+			accessTokenCookie, err := r.Cookie("access")
 			if err != nil {
 				utils.ResponseJSON(w, http.StatusForbidden, map[string]string{
 					"error": tokenReadingFailed,
@@ -29,25 +31,48 @@ func (s *Server) ValidateAuth() func(next http.Handler) http.Handler {
 				logger.Errorf(tokenReadingFailed)
 				return
 			}
-
-			// GRPC call to auth mocked!
-			user, err := &models.User{
-				Login:        "test123",
-				PasswordHash: "b1b3773a05c0ed0176787a4f1574ff0075f7521e",
-			}, nil
-			_ = accessToken.Value
-			// GRPC call to auth mocked!
-
-			if err != nil {
+			refreshTokenCookie, err := r.Cookie("refresh")
+			refreshToken := refreshTokenCookie.Value
+			if errors.Is(err, http.ErrNoCookie) {
+				refreshToken = ""
+			} else if err != nil {
 				utils.ResponseJSON(w, http.StatusForbidden, map[string]string{
-					"error": invalidToken,
+					"error": tokenReadingFailed,
 				})
-				logger.Errorf(invalidToken)
+				logger.Errorf(tokenReadingFailed)
 				return
 			}
-			ctx := r.Context()
 
-			ctx = context.WithValue(ctx, ctxKeyUser{}, user)
+			ar, err := s.task.ValidateAuth(r.Context(), models.TokenPair{
+				AccessToken:  accessTokenCookie.Value,
+				RefreshToken: refreshToken,
+			})
+			if err != nil {
+				utils.ResponseJSON(w, http.StatusInternalServerError, map[string]string{
+					"error": fmt.Sprintf("failed to validate token with auth service: %s", err.Error()),
+				})
+				logger.Errorf("failed to validate token with auth service: %s", err.Error())
+				return
+			}
+			if ar.Status == models.RefusedAuthRespStatus {
+				utils.ResponseJSON(w, http.StatusUnauthorized, map[string]string{
+					"error": "authorization required",
+				})
+				logger.Errorf("authorization required")
+				return
+			} else if ar.Status == models.RefreshedAuthRespStatus {
+				http.SetCookie(w, &http.Cookie{
+					Name:  "access",
+					Value: ar.AccessToken,
+				})
+				http.SetCookie(w, &http.Cookie{
+					Name:  "refresh",
+					Value: ar.RefreshToken,
+				})
+			}
+
+			ctx := r.Context()
+			ctx = context.WithValue(ctx, ctxKeyUser{}, ar.Login)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

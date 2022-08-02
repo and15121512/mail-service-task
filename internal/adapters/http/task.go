@@ -57,7 +57,7 @@ func (s *Server) CreateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, ok := r.Context().Value(ctxKeyUser{}).(*models.User)
+	login, ok := r.Context().Value(ctxKeyUser{}).(string)
 	if !ok {
 		utils.ResponseJSON(w, http.StatusInternalServerError, map[string]string{
 			"error": "failed to extract token from request",
@@ -65,6 +65,7 @@ func (s *Server) CreateTask(w http.ResponseWriter, r *http.Request) {
 		logger.Errorf("failed to extract token from request")
 		return
 	}
+	user := &models.User{Login: login}
 
 	task, err := s.task.CreateTask(r.Context(), models.Task{
 		Logins:         req.Logins,
@@ -152,7 +153,7 @@ func (s *Server) UpdateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, ok := r.Context().Value(ctxKeyUser{}).(*models.User)
+	login, ok := r.Context().Value(ctxKeyUser{}).(string)
 	if !ok {
 		utils.ResponseJSON(w, http.StatusInternalServerError, map[string]string{
 			"error": "failed to extract token from request",
@@ -160,6 +161,7 @@ func (s *Server) UpdateTask(w http.ResponseWriter, r *http.Request) {
 		logger.Errorf("failed to extract token from request")
 		return
 	}
+	user := &models.User{Login: login}
 
 	err = s.task.UpdateTask(r.Context(), models.Task{
 		ID:          task_id,
@@ -191,7 +193,7 @@ func (s *Server) DeleteTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, ok := r.Context().Value(ctxKeyUser{}).(*models.User)
+	login, ok := r.Context().Value(ctxKeyUser{}).(string)
 	if !ok {
 		utils.ResponseJSON(w, http.StatusInternalServerError, map[string]string{
 			"error": "failed to extract token from request",
@@ -199,6 +201,7 @@ func (s *Server) DeleteTask(w http.ResponseWriter, r *http.Request) {
 		logger.Errorf("failed to extract token from request")
 		return
 	}
+	user := &models.User{Login: login}
 
 	err := s.task.DeleteTask(r.Context(), task_id, *user)
 	if err != nil {

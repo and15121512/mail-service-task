@@ -13,4 +13,4 @@ COPY --from=builder /etc/ssl/certs /etc/ssl/certs/
 WORKDIR /task
 
 CMD ["./main"]
-EXPOSE 8626
+EXPOSE 3000 4000

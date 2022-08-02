@@ -4,11 +4,14 @@ version: "3"
 
 services:
   mail-service-task:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    #build:
+    #  context: .
+    #  dockerfile: Dockerfile
+    image:
+      mail-service-task:latest
     ports:
-      - 8626:8626
+      - 3002:3000
+      - 4002:4000
     depends_on:
       - mongo-db
 
@@ -20,3 +23,15 @@ services:
     ports:
       - 27017:27017
     command: --config /etc/mongod.conf
+  
+  mail-service-auth:
+    #build:
+    #  context: .
+    #  dockerfile: ../mail-service-auth/Dockerfile
+    image:
+      mail-service-auth:latest
+    ports:
+      - 3001:3000
+      - 4001:4000
+#    depends_on:
+#      - mongo-db

@@ -5,9 +5,11 @@ import (
 	"fmt"
 
 	"github.com/TheZeroSlave/zapsentry"
+	"gitlab.com/sukharnikov.aa/mail-service-task/internal/adapters/auth_grpc"
 	"gitlab.com/sukharnikov.aa/mail-service-task/internal/adapters/http"
 	"gitlab.com/sukharnikov.aa/mail-service-task/internal/adapters/mail"
 	"gitlab.com/sukharnikov.aa/mail-service-task/internal/adapters/mongodb"
+	"gitlab.com/sukharnikov.aa/mail-service-task/internal/config"
 	"gitlab.com/sukharnikov.aa/mail-service-task/internal/domain/task"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -51,7 +53,10 @@ func Start(ctx context.Context) {
 	//defer sentryClient.Flush(2 * time.Second)
 	logger = modifyToSentryLogger(logger, "http://b7dd7b3ce3df4f2b81f5af622512658c@localhost:9000/2")
 
-	db, disconn, err := mongodb.New(ctx, "mongodb://mongo-db-task:27017/", "task", "task", logger.Sugar())
+	mongoHost := config.GetConfig(logger.Sugar()).Hosts.MongoHost
+	mongoPort := config.GetConfig(logger.Sugar()).Ports.MongoPort
+	connectionString := fmt.Sprintf("mongodb://%s:%s/", mongoHost, mongoPort)
+	db, disconn, err := mongodb.New(ctx, connectionString, "task", "task", logger.Sugar())
 	defer disconn()
 	if err != nil {
 		logger.Sugar().Fatalf("mongodb init failed: %s", err)
@@ -62,8 +67,9 @@ func Start(ctx context.Context) {
 	//	logger.Sugar().Fatalf("db init failed: %s", err)
 	//}
 	m := mail.New(logger.Sugar())
+	ac := auth_grpc.New(logger.Sugar())
 
-	taskS := task.New(db, m, logger.Sugar())
+	taskS := task.New(db, m, ac, logger.Sugar())
 
 	s, err = http.New(taskS, logger.Sugar())
 	if err != nil {

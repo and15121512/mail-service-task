@@ -13,4 +13,6 @@ type Task interface {
 	DeleteTask(ctx context.Context, task_id string, user models.User) error
 	ApproveOrDecline(ctx context.Context, task_id string, token string, decision string) error
 	// ...
+
+	ValidateAuth(ctx context.Context, tokenpair models.TokenPair) (models.AuthResult, error)
 }

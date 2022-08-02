@@ -3,5 +3,10 @@
 is_debug: true
 token:
   salt: # h1$2Ej#jd5e23jkl2F
-listen:
-  port: 8626 # If 0 then automatic port selection
+ports:
+  http_port: 3000 # If 0 then automatic port selection
+  grpc_port: 4000 # If 0 then automatic port selection
+  mongo_port: 27017
+hosts:
+  auth_host: mail-service-auth
+  mongo_host: mongo-db-task

@@ -16,13 +16,15 @@ import (
 type Service struct {
 	ts     ports.TaskStorage
 	m      ports.Mail
+	ac     ports.Auth
 	logger *zap.SugaredLogger
 }
 
-func New(ts ports.TaskStorage, m ports.Mail, logger *zap.SugaredLogger) *Service {
+func New(ts ports.TaskStorage, m ports.Mail, ac ports.Auth, logger *zap.SugaredLogger) *Service {
 	return &Service{
 		ts:     ts,
 		m:      m,
+		ac:     ac,
 		logger: logger,
 	}
 }
@@ -223,9 +225,9 @@ func (s *Service) generateToken(ctx context.Context, task_id string, login strin
 }
 
 func (s *Service) generateApprovalLink(task_id string, token string) string {
-	return "https://127.0.0.1:" + config.GetConfig(s.logger).Listen.Port + "/tasks/" + task_id + "/approve?token=" + token + "&decision=approve"
+	return "https://127.0.0.1:" + config.GetConfig(s.logger).Ports.HttpPort + "/tasks/" + task_id + "/approve?token=" + token + "&decision=approve"
 }
 
 func (s *Service) generateDeclineLink(task_id string, token string) string {
-	return "https://127.0.0.1:" + config.GetConfig(s.logger).Listen.Port + "/tasks/" + task_id + "/approve?token=" + token + "&decision=decline"
+	return "https://127.0.0.1:" + config.GetConfig(s.logger).Ports.HttpPort + "/tasks/" + task_id + "/approve?token=" + token + "&decision=decline"
 }
