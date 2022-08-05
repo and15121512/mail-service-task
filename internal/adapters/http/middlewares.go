@@ -43,7 +43,7 @@ func (s *Server) ValidateAuth() func(next http.Handler) http.Handler {
 				return
 			}
 
-			ar, err := s.task.ValidateAuth(r.Context(), models.TokenPair{
+			ar, err := s.task.ValidateAuth(r.Context(), &models.TokenPair{
 				AccessToken:  accessTokenCookie.Value,
 				RefreshToken: refreshToken,
 			})

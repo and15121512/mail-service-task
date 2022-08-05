@@ -7,5 +7,5 @@ import (
 )
 
 type Auth interface {
-	ValidateAuth(ctx context.Context, tokenpair models.TokenPair) (models.AuthResult, error)
+	ValidateAuth(ctx context.Context, tokenpair *models.TokenPair) (*models.AuthResult, error)
 }

@@ -35,7 +35,7 @@ func (ag *AuthGrpc) annotatedLogger(ctx context.Context) *zap.SugaredLogger {
 	)
 }
 
-func (ag *AuthGrpc) ValidateAuth(ctx context.Context, tokenpair models.TokenPair) (models.AuthResult, error) {
+func (ag *AuthGrpc) ValidateAuth(ctx context.Context, tokenpair *models.TokenPair) (*models.AuthResult, error) {
 	logger := ag.annotatedLogger(ctx)
 
 	auth_host := config.GetConfig(logger).Hosts.AuthHost
@@ -44,7 +44,7 @@ func (ag *AuthGrpc) ValidateAuth(ctx context.Context, tokenpair models.TokenPair
 	conn, err := grpc.DialContext(ctx, target, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 	if err != nil {
 		logger.Errorf("failed to connect to auth service: %s", err.Error())
-		return models.AuthResult{}, fmt.Errorf("failed to connect to auth service: %s", err.Error())
+		return &models.AuthResult{}, fmt.Errorf("failed to connect to auth service: %s", err.Error())
 	}
 	defer conn.Close()
 
@@ -58,7 +58,7 @@ func (ag *AuthGrpc) ValidateAuth(ctx context.Context, tokenpair models.TokenPair
 	ar, err := a.Validate(ctx, &authTokenpair)
 	if err != nil {
 		logger.Errorf("failed to call validate from auth service: %s", err.Error())
-		return models.AuthResult{}, fmt.Errorf("failed to call validate from auth service: %s", err.Error())
+		return &models.AuthResult{}, fmt.Errorf("failed to call validate from auth service: %s", err.Error())
 	}
 
 	logger.Infof("Login after grpc call: %s", ar.Login)
@@ -79,8 +79,8 @@ func (ag *AuthGrpc) ValidateAuth(ctx context.Context, tokenpair models.TokenPair
 		logger.Infof("token validation failed")
 	} else {
 		logger.Errorf("unknown response status from auth service")
-		return models.AuthResult{}, fmt.Errorf("unknown response status from auth service")
+		return &models.AuthResult{}, fmt.Errorf("unknown response status from auth service")
 	}
 
-	return authResult, nil
+	return &authResult, nil
 }

@@ -48,7 +48,7 @@ func (db *Database) annotatedLogger(ctx context.Context) *zap.SugaredLogger {
 	)
 }
 
-func (db *Database) InsertTask(ctx context.Context, task models.Task) error {
+func (db *Database) InsertTask(ctx context.Context, task *models.Task) error {
 	logger := db.annotatedLogger(ctx)
 
 	mCollection := db.mClient.Database(db.dbName).Collection(db.collName)
@@ -61,7 +61,7 @@ func (db *Database) InsertTask(ctx context.Context, task models.Task) error {
 	return nil
 }
 
-func (db *Database) GetTask(ctx context.Context, task_id string) (models.Task, error) {
+func (db *Database) GetTask(ctx context.Context, task_id string) (*models.Task, error) {
 	logger := db.annotatedLogger(ctx)
 
 	mCollection := db.mClient.Database(db.dbName).Collection(db.collName)
@@ -69,13 +69,13 @@ func (db *Database) GetTask(ctx context.Context, task_id string) (models.Task, e
 	err := mCollection.FindOne(ctx, bson.M{"_id": task_id}).Decode(&task)
 	if err != nil {
 		logger.Errorf("failed to find task %s: %s", task.ID, err.Error())
-		return models.Task{}, fmt.Errorf("failed to find task %s: %s", task.ID, err.Error())
+		return &models.Task{}, fmt.Errorf("failed to find task %s: %s", task.ID, err.Error())
 	}
 
-	return task, nil
+	return &task, nil
 }
 
-func (db *Database) UpdateTask(ctx context.Context, task models.Task) error {
+func (db *Database) UpdateTask(ctx context.Context, task *models.Task) error {
 	logger := db.annotatedLogger(ctx)
 
 	mCollection := db.mClient.Database(db.dbName).Collection(db.collName)

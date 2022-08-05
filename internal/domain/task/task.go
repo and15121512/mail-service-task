@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha1"
 	"fmt"
+	"regexp"
 
 	uuid "github.com/satori/go.uuid"
 	"gitlab.com/sukharnikov.aa/mail-service-task/internal/config"
@@ -14,19 +15,26 @@ import (
 )
 
 type Service struct {
-	ts     ports.TaskStorage
-	m      ports.Mail
-	ac     ports.Auth
-	logger *zap.SugaredLogger
+	ts       ports.TaskStorage
+	m        ports.Mail
+	ac       ports.Auth
+	logger   *zap.SugaredLogger
+	uuidFunc func() uuid.UUID
 }
 
-func New(ts ports.TaskStorage, m ports.Mail, ac ports.Auth, logger *zap.SugaredLogger) *Service {
-	return &Service{
-		ts:     ts,
-		m:      m,
-		ac:     ac,
-		logger: logger,
+func New(ts ports.TaskStorage, m ports.Mail, ac ports.Auth, logger *zap.SugaredLogger, uuidFunc ...func() uuid.UUID) *Service {
+	s := &Service{
+		ts:       ts,
+		m:        m,
+		ac:       ac,
+		logger:   logger,
+		uuidFunc: uuid.NewV4,
 	}
+
+	if len(uuidFunc) > 0 {
+		s.uuidFunc = uuidFunc[0]
+	}
+	return s
 }
 
 func (s *Service) annotatedLogger(ctx context.Context) *zap.SugaredLogger {
@@ -41,43 +49,71 @@ func (s *Service) annotatedLogger(ctx context.Context) *zap.SugaredLogger {
 	)
 }
 
-func (s *Service) CreateTask(ctx context.Context, task models.Task) (models.Task, error) {
+func (s *Service) CreateTask(ctx context.Context, task *models.Task) (*models.Task, error) {
 	logger := s.annotatedLogger(ctx)
-
-	task.ID = uuid.NewV4().String()
-	approvalTokens := make([]string, len(task.Logins))
-	for i, login := range task.Logins {
-		approvalTokens[i] = s.generateToken(ctx, task.ID, login)
+	if err := s.isTaskValid(task); err != nil {
+		logger.Errorf(err.Error())
+		return &models.Task{}, err
 	}
-	task.ApprovalTokens = approvalTokens
-	task.CurrApprovalNum = 0
-	task.Status = models.TaskInProgressStatus
 
-	err := s.ts.InsertTask(ctx, task)
+	newTask := *task
+	newTask.ID = s.uuidFunc().String()
+	approvalTokens := make([]string, len(newTask.Logins))
+	for i, login := range newTask.Logins {
+		approvalTokens[i] = s.generateToken(ctx, newTask.ID, login)
+	}
+	newTask.ApprovalTokens = approvalTokens
+	newTask.CurrApprovalNum = 0
+	newTask.Status = models.TaskInProgressStatus
+
+	err := s.ts.InsertTask(ctx, &newTask)
 	if err != nil {
 		logger.Errorf("failed to insert task into storage")
-		return models.Task{}, fmt.Errorf("failed to insert task into storage")
+		return &models.Task{}, fmt.Errorf("failed to insert task into storage")
 	}
 
-	if len(task.Logins) == 0 {
-		return task, nil
-	}
 	s.m.SendApprovalMail(ctx, models.MailToApproval{
-		Destination:  task.Logins[0],
-		ApprovalLink: s.generateApprovalLink(task.ID, approvalTokens[0]),
-		DeclineLink:  s.generateDeclineLink(task.ID, approvalTokens[0]),
+		Destination:  newTask.Logins[0],
+		ApprovalLink: s.generateApprovalLink(newTask.ID, approvalTokens[0]),
+		DeclineLink:  s.generateDeclineLink(newTask.ID, approvalTokens[0]),
 	})
 
-	return task, nil
+	return &newTask, nil
 }
 
-func (s *Service) GetTask(ctx context.Context, task_id string) (models.Task, error) {
+func (s *Service) isTaskValid(task *models.Task) error {
+	if len(task.Logins) == 0 {
+		return fmt.Errorf("no logins provided to send approval emails")
+	}
+	for _, login := range task.Logins {
+		if err := s.isLoginValid(login); err != nil {
+			return fmt.Errorf("invalid email provided: %s", err.Error())
+		}
+	}
+	return nil
+}
+
+func (s *Service) isLoginValid(login string) error {
+	pattern := `\w+`
+	matched, err := regexp.Match(pattern, []byte(login))
+	if err != nil || !matched {
+		return fmt.Errorf("failed to parse login: only [A-Za-z0-9_]+ allowed")
+	}
+	return nil
+}
+
+func (s *Service) GetTask(ctx context.Context, task_id string) (*models.Task, error) {
 	return s.ts.GetTask(ctx, task_id)
 }
 
-func (s *Service) UpdateTask(ctx context.Context, newTask models.Task, user models.User) error {
+func (s *Service) UpdateTask(ctx context.Context, task *models.Task, user *models.User) error {
 	logger := s.annotatedLogger(ctx)
+	if err := s.isTaskValid(task); err != nil {
+		logger.Errorf(err.Error())
+		return err
+	}
 
+	newTask := *task
 	oldTask, err := s.ts.GetTask(ctx, newTask.ID)
 	if err != nil {
 		logger.Errorf("failed to get task with task ID %s for update", newTask.ID)
@@ -97,7 +133,7 @@ func (s *Service) UpdateTask(ctx context.Context, newTask models.Task, user mode
 	newTask.CurrApprovalNum = 0
 	newTask.Status = models.TaskInProgressStatus
 
-	err = s.ts.UpdateTask(ctx, newTask)
+	err = s.ts.UpdateTask(ctx, &newTask)
 	if err != nil {
 		logger.Errorf("failed to update task with task ID %s", newTask.ID)
 		return fmt.Errorf("failed to update task with task ID %s", newTask.ID)
@@ -108,10 +144,6 @@ func (s *Service) UpdateTask(ctx context.Context, newTask models.Task, user mode
 		TaskID:       oldTask.ID,
 		Result:       "task was updated",
 	})
-
-	if len(newTask.Logins) == 0 {
-		return nil
-	}
 	s.m.SendApprovalMail(ctx, models.MailToApproval{
 		Destination:  newTask.Logins[0],
 		ApprovalLink: s.generateApprovalLink(newTask.ID, approvalTokens[0]),
@@ -120,7 +152,7 @@ func (s *Service) UpdateTask(ctx context.Context, newTask models.Task, user mode
 	return nil
 }
 
-func (s *Service) DeleteTask(ctx context.Context, task_id string, user models.User) error {
+func (s *Service) DeleteTask(ctx context.Context, task_id string, user *models.User) error {
 	logger := s.annotatedLogger(ctx)
 
 	task, err := s.ts.GetTask(ctx, task_id)
@@ -163,9 +195,9 @@ func (s *Service) ApproveOrDecline(ctx context.Context, task_id string, token st
 	}
 
 	if decision == "approve" {
-		err = s.approve(ctx, &task)
+		err = s.approve(ctx, task)
 	} else if decision == "decline" {
-		err = s.decline(ctx, &task)
+		err = s.decline(ctx, task)
 	} else {
 		logger.Errorf("invalid decision value (expected 'approve' or 'decline')")
 		return fmt.Errorf("invalid decision value (expected 'approve' or 'decline')")

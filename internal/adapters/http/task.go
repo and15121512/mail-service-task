@@ -67,7 +67,7 @@ func (s *Server) CreateTask(w http.ResponseWriter, r *http.Request) {
 	}
 	user := &models.User{Login: login}
 
-	task, err := s.task.CreateTask(r.Context(), models.Task{
+	task, err := s.task.CreateTask(r.Context(), &models.Task{
 		Logins:         req.Logins,
 		Title:          req.Title,
 		Description:    req.Description,
@@ -163,12 +163,12 @@ func (s *Server) UpdateTask(w http.ResponseWriter, r *http.Request) {
 	}
 	user := &models.User{Login: login}
 
-	err = s.task.UpdateTask(r.Context(), models.Task{
+	err = s.task.UpdateTask(r.Context(), &models.Task{
 		ID:          task_id,
 		Logins:      req.Logins,
 		Title:       req.Title,
 		Description: req.Description,
-	}, *user)
+	}, user)
 	if err != nil {
 		utils.ResponseJSON(w, http.StatusBadRequest, map[string]string{
 			"error": fmt.Sprintf("failed to update task requested by login %s; are you the task author?", user.Login),
@@ -203,7 +203,7 @@ func (s *Server) DeleteTask(w http.ResponseWriter, r *http.Request) {
 	}
 	user := &models.User{Login: login}
 
-	err := s.task.DeleteTask(r.Context(), task_id, *user)
+	err := s.task.DeleteTask(r.Context(), task_id, user)
 	if err != nil {
 		utils.ResponseJSON(w, http.StatusBadRequest, map[string]string{
 			"error": fmt.Sprintf("failed to delete task requested by login %s; are you the task author?", user.Login),
