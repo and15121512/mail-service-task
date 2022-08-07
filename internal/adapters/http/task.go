@@ -57,14 +57,7 @@ func (s *Server) CreateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	login, ok := r.Context().Value(ctxKeyUser{}).(string)
-	if !ok {
-		utils.ResponseJSON(w, http.StatusInternalServerError, map[string]string{
-			"error": "failed to extract token from request",
-		})
-		logger.Errorf("failed to extract token from request")
-		return
-	}
+	login, _ := r.Context().Value(utils.CtxKeyUserGet()).(string)
 	user := &models.User{Login: login}
 
 	task, err := s.task.CreateTask(r.Context(), &models.Task{
@@ -91,6 +84,9 @@ func (s *Server) GetTask(w http.ResponseWriter, r *http.Request) {
 
 	task_id := chi.URLParam(r, "task_id")
 	if task_id == "" {
+		task_id = s.defaultTaskId
+	}
+	if task_id == "" {
 		utils.ResponseJSON(w, http.StatusNotFound, map[string]string{
 			"error": "No task ID provided in URL for get task request",
 		})
@@ -100,7 +96,7 @@ func (s *Server) GetTask(w http.ResponseWriter, r *http.Request) {
 
 	task, err := s.task.GetTask(r.Context(), task_id)
 	if err != nil {
-		utils.ResponseJSON(w, http.StatusNotFound, map[string]string{
+		utils.ResponseJSON(w, http.StatusInternalServerError, map[string]string{
 			"error": fmt.Sprintf("failed to get info for task ID %s", task_id),
 		})
 		logger.Errorf("failed to get info for task ID %s", task_id)
@@ -114,14 +110,7 @@ func (s *Server) GetTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data, err := json.Marshal(task)
-	if err != nil {
-		utils.ResponseJSON(w, http.StatusInternalServerError, map[string]string{
-			"error": fmt.Sprintf("failed to encode task requested with task ID %s", task_id),
-		})
-		logger.Errorf("failed to encode task requested with task ID %s", task_id)
-		return
-	}
+	data, _ := json.Marshal(task)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(data)
@@ -136,6 +125,9 @@ type updateTaskRequest struct {
 func (s *Server) UpdateTask(w http.ResponseWriter, r *http.Request) {
 	logger := s.annotatedLogger(r.Context())
 	task_id := chi.URLParam(r, "task_id")
+	if task_id == "" {
+		task_id = s.defaultTaskId
+	}
 	if task_id == "" {
 		utils.ResponseJSON(w, http.StatusNotFound, map[string]string{
 			"error": "No task ID provided in URL for update task request",
@@ -153,7 +145,7 @@ func (s *Server) UpdateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	login, ok := r.Context().Value(ctxKeyUser{}).(string)
+	login, ok := r.Context().Value(utils.CtxKeyUserGet()).(string)
 	if !ok {
 		utils.ResponseJSON(w, http.StatusInternalServerError, map[string]string{
 			"error": "failed to extract token from request",
@@ -186,6 +178,9 @@ func (s *Server) DeleteTask(w http.ResponseWriter, r *http.Request) {
 
 	task_id := chi.URLParam(r, "task_id")
 	if task_id == "" {
+		task_id = s.defaultTaskId
+	}
+	if task_id == "" {
 		utils.ResponseJSON(w, http.StatusNotFound, map[string]string{
 			"error": "No task ID provided in URL for delete task request",
 		})
@@ -193,7 +188,7 @@ func (s *Server) DeleteTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	login, ok := r.Context().Value(ctxKeyUser{}).(string)
+	login, ok := r.Context().Value(utils.CtxKeyUserGet()).(string)
 	if !ok {
 		utils.ResponseJSON(w, http.StatusInternalServerError, map[string]string{
 			"error": "failed to extract token from request",
@@ -214,13 +209,13 @@ func (s *Server) DeleteTask(w http.ResponseWriter, r *http.Request) {
 	utils.ResponseJSON(w, http.StatusOK, map[string]string{})
 }
 
-func ListTasks(w http.ResponseWriter, r *http.Request) {
-}
-
 func (s *Server) ApproveOrDecline(w http.ResponseWriter, r *http.Request) {
 	logger := s.annotatedLogger(r.Context())
 
 	task_id := chi.URLParam(r, "task_id")
+	if task_id == "" {
+		task_id = s.defaultTaskId
+	}
 	if task_id == "" {
 		utils.ResponseJSON(w, http.StatusNotFound, map[string]string{
 			"error": "no task ID provided in URL for approve request",

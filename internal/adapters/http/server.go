@@ -14,11 +14,12 @@ import (
 )
 
 type Server struct {
-	task   ports.Task
-	server *http.Server
-	l      net.Listener
-	port   int
-	logger *zap.SugaredLogger
+	task          ports.Task
+	server        *http.Server
+	l             net.Listener
+	port          int
+	logger        *zap.SugaredLogger
+	defaultTaskId string
 }
 
 func New(task ports.Task, logger *zap.SugaredLogger) (*Server, error) {
@@ -38,6 +39,21 @@ func New(task ports.Task, logger *zap.SugaredLogger) (*Server, error) {
 	}
 
 	return &s, nil
+}
+
+func NewTest(task ports.Task, logger *zap.SugaredLogger, defaultTaskId ...string) *Server {
+	var (
+		s Server
+	)
+	s.logger = logger
+	s.task = task
+
+	s.defaultTaskId = ""
+	if len(defaultTaskId) > 0 {
+		s.defaultTaskId = defaultTaskId[0]
+	}
+
+	return &s
 }
 
 func (s *Server) Port() int {

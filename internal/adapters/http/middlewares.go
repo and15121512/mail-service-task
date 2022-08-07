@@ -2,7 +2,6 @@ package http
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 
@@ -15,8 +14,6 @@ const (
 	tokenReadingFailed = "cannot read token from header"
 	invalidToken       = "invalid token"
 )
-
-type ctxKeyUser struct{}
 
 func (s *Server) ValidateAuth() func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -32,15 +29,9 @@ func (s *Server) ValidateAuth() func(next http.Handler) http.Handler {
 				return
 			}
 			refreshTokenCookie, err := r.Cookie("refresh")
-			refreshToken := refreshTokenCookie.Value
-			if errors.Is(err, http.ErrNoCookie) {
-				refreshToken = ""
-			} else if err != nil {
-				utils.ResponseJSON(w, http.StatusForbidden, map[string]string{
-					"error": tokenReadingFailed,
-				})
-				logger.Errorf(tokenReadingFailed)
-				return
+			refreshToken := ""
+			if err == nil {
+				refreshToken = refreshTokenCookie.Value
 			}
 
 			ar, err := s.task.ValidateAuth(r.Context(), &models.TokenPair{
@@ -72,7 +63,7 @@ func (s *Server) ValidateAuth() func(next http.Handler) http.Handler {
 			}
 
 			ctx := r.Context()
-			ctx = context.WithValue(ctx, ctxKeyUser{}, ar.Login)
+			ctx = context.WithValue(ctx, utils.CtxKeyUserGet(), ar.Login)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

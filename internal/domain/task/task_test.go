@@ -11,9 +11,9 @@ import (
 	"gitlab.com/sukharnikov.aa/mail-service-task/internal/config"
 	"gitlab.com/sukharnikov.aa/mail-service-task/internal/domain/models"
 	"gitlab.com/sukharnikov.aa/mail-service-task/internal/domain/task"
-	"gitlab.com/sukharnikov.aa/mail-service-task/internal/domain/task/mocks/mock_auth"
-	"gitlab.com/sukharnikov.aa/mail-service-task/internal/domain/task/mocks/mock_mail"
-	"gitlab.com/sukharnikov.aa/mail-service-task/internal/domain/task/mocks/mock_task_storage"
+	"gitlab.com/sukharnikov.aa/mail-service-task/internal/mocks/mock_auth"
+	"gitlab.com/sukharnikov.aa/mail-service-task/internal/mocks/mock_mail"
+	"gitlab.com/sukharnikov.aa/mail-service-task/internal/mocks/mock_task_storage"
 	"go.uber.org/zap"
 )
 
@@ -415,75 +415,449 @@ func (s *unitTestSuite) TestUpdateTaskNotInitiator() {
 	ma.AssertExpectations(s.T())
 }
 
-// Tests: DeleteTask
+// Tests: ApproveOrDecline
 
-// func (s *unitTestSuite) TestDeleteTaskOk() {
-// 	taskId := "1dea04bf-fd0c-48e0-9032-6ad3ddaea5af"
-// 	logins := []string{
-// 		"MyLogin1",
-// 		"MyLogin2",
-// 		"MyLogin3",
-// 		"MyLogin4",
-// 	}
-// 	approvalTokens := []string{
-// 		s.generateToken(taskId, "MyLogin1"),
-// 		s.generateToken(taskId, "MyLogin2"),
-// 		s.generateToken(taskId, "MyLogin3"),
-// 		s.generateToken(taskId, "MyLogin4"),
-// 	}
-// 	title := "MyTask1"
-// 	description := "This task is important one too!"
-// 	initiatorLogin := "test123"
-// 	userLogin := "test123"
+func (s *unitTestSuite) TestApproveOrDeclineNonLastApproveOk() {
+	taskId := "1dea04bf-fd0c-48e0-9032-6ad3ddaea5af"
+	logins := []string{
+		"MyLogin1",
+		"MyLogin2",
+		"MyLogin3",
+		"MyLogin4",
+	}
+	approvalTokens := []string{
+		s.generateToken(taskId, "MyLogin1"),
+		s.generateToken(taskId, "MyLogin2"),
+		s.generateToken(taskId, "MyLogin3"),
+		s.generateToken(taskId, "MyLogin4"),
+	}
+	title := "MyTask1"
+	description := "This task is important one too!"
+	initiatorLogin := "test123"
 
-// 	mts := new(mock_task_storage.MockTaskStorage)
-// 	mm := new(mock_mail.MockMail)
-// 	ma := new(mock_auth.MockAuth)
-// 	logger, _ := zap.NewProduction()
-// 	taskIdUuid, err := uuid.FromString(taskId)
-// 	s.NoError(err, "bad task id provided for test")
-// 	srv := task.New(mts, mm, ma, logger.Sugar(), func() uuid.UUID {
-// 		return taskIdUuid
-// 	})
+	mts := new(mock_task_storage.MockTaskStorage)
+	mm := new(mock_mail.MockMail)
+	ma := new(mock_auth.MockAuth)
+	logger, _ := zap.NewProduction()
+	taskIdUuid, err := uuid.FromString(taskId)
+	s.NoError(err, "bad task id provided for test")
+	srv := task.New(mts, mm, ma, logger.Sugar(), func() uuid.UUID {
+		return taskIdUuid
+	})
 
-// 	mts.On("InsertTask",
-// 		&models.Task{
-// 			ID:              taskId,
-// 			Logins:          logins,
-// 			ApprovalTokens:  approvalTokens,
-// 			Title:           title,
-// 			Description:     description,
-// 			InitiatorLogin:  initiatorLogin,
-// 			CurrApprovalNum: 0,
-// 			Status:          models.TaskInProgressStatus,
-// 		}).
-// 		Return(nil)
+	mts.On("GetTask", taskId).
+		Return(&models.Task{
+			ID:              taskId,
+			Logins:          logins,
+			ApprovalTokens:  approvalTokens,
+			Title:           title,
+			Description:     description,
+			InitiatorLogin:  initiatorLogin,
+			CurrApprovalNum: 2,
+			Status:          models.TaskInProgressStatus,
+		}, nil)
 
-// 	mm.On("SendApprovalMail",
-// 		models.MailToApproval{
-// 			Destination:  "MyLogin1",
-// 			ApprovalLink: s.generateApprovalLink(taskId, approvalTokens[0]),
-// 			DeclineLink:  s.generateDeclineLink(taskId, approvalTokens[0]),
-// 		}).
-// 		Return()
+	mm.On("SendApprovalMail",
+		models.MailToApproval{
+			Destination:  "MyLogin4",
+			ApprovalLink: s.generateApprovalLink(taskId, approvalTokens[3]),
+			DeclineLink:  s.generateDeclineLink(taskId, approvalTokens[3]),
+		}).
+		Return()
 
-// 	taskIn := &models.Task{
-// 		Logins:         logins,
-// 		Title:          title,
-// 		Description:    description,
-// 		InitiatorLogin: initiatorLogin,
-// 	}
-// 	taskOut, err := srv.CreateTask(
-// 		context.Background(),
-// 		taskIn,
-// 	)
+	mts.On("UpdateTask",
+		&models.Task{
+			ID:              taskId,
+			Logins:          logins,
+			ApprovalTokens:  approvalTokens,
+			Title:           title,
+			Description:     description,
+			InitiatorLogin:  initiatorLogin,
+			CurrApprovalNum: 3,
+			Status:          models.TaskInProgressStatus,
+		}).
+		Return(nil)
 
-// 	s.Nil(err, "error must be nil")
-// 	s.NotNil(taskOut, "task cannot be nil")
-// 	s.Equal(taskId, taskOut.ID, "wrong task id")
-// 	s.NotEqual(taskIn, taskOut, "returned task object cannot be one from args")
+	err = srv.ApproveOrDecline(
+		context.Background(),
+		taskId,
+		approvalTokens[2],
+		"approve",
+	)
 
-// 	mts.AssertExpectations(s.T())
-// 	mm.AssertExpectations(s.T())
-// 	ma.AssertExpectations(s.T())
-// }
+	s.Nil(err, "error must be nil")
+
+	mts.AssertExpectations(s.T())
+	mm.AssertExpectations(s.T())
+	ma.AssertExpectations(s.T())
+}
+
+func (s *unitTestSuite) TestApproveOrDeclineLastApproveOk() {
+	taskId := "1dea04bf-fd0c-48e0-9032-6ad3ddaea5af"
+	logins := []string{
+		"MyLogin1",
+		"MyLogin2",
+		"MyLogin3",
+		"MyLogin4",
+	}
+	approvalTokens := []string{
+		s.generateToken(taskId, "MyLogin1"),
+		s.generateToken(taskId, "MyLogin2"),
+		s.generateToken(taskId, "MyLogin3"),
+		s.generateToken(taskId, "MyLogin4"),
+	}
+	title := "MyTask1"
+	description := "This task is important one too!"
+	initiatorLogin := "test123"
+
+	mts := new(mock_task_storage.MockTaskStorage)
+	mm := new(mock_mail.MockMail)
+	ma := new(mock_auth.MockAuth)
+	logger, _ := zap.NewProduction()
+	taskIdUuid, err := uuid.FromString(taskId)
+	s.NoError(err, "bad task id provided for test")
+	srv := task.New(mts, mm, ma, logger.Sugar(), func() uuid.UUID {
+		return taskIdUuid
+	})
+
+	mts.On("GetTask", taskId).
+		Return(&models.Task{
+			ID:              taskId,
+			Logins:          logins,
+			ApprovalTokens:  approvalTokens,
+			Title:           title,
+			Description:     description,
+			InitiatorLogin:  initiatorLogin,
+			CurrApprovalNum: 3,
+			Status:          models.TaskInProgressStatus,
+		}, nil)
+
+	mm.On("SendResultMail",
+		models.ResultMail{
+			Destinations: logins,
+			TaskID:       taskId,
+			Result:       "task was done",
+		}).
+		Return()
+
+	mts.On("UpdateTask",
+		&models.Task{
+			ID:              taskId,
+			Logins:          logins,
+			ApprovalTokens:  approvalTokens,
+			Title:           title,
+			Description:     description,
+			InitiatorLogin:  initiatorLogin,
+			CurrApprovalNum: 4,
+			Status:          models.TaskDoneStatus,
+		}).
+		Return(nil)
+
+	err = srv.ApproveOrDecline(
+		context.Background(),
+		taskId,
+		approvalTokens[3],
+		"approve",
+	)
+
+	s.Nil(err, "error must be nil")
+
+	mts.AssertExpectations(s.T())
+	mm.AssertExpectations(s.T())
+	ma.AssertExpectations(s.T())
+}
+
+func (s *unitTestSuite) TestApproveOrDeclineDeclineOk() {
+	taskId := "1dea04bf-fd0c-48e0-9032-6ad3ddaea5af"
+	logins := []string{
+		"MyLogin1",
+		"MyLogin2",
+		"MyLogin3",
+		"MyLogin4",
+	}
+	approvalTokens := []string{
+		s.generateToken(taskId, "MyLogin1"),
+		s.generateToken(taskId, "MyLogin2"),
+		s.generateToken(taskId, "MyLogin3"),
+		s.generateToken(taskId, "MyLogin4"),
+	}
+	title := "MyTask1"
+	description := "This task is important one too!"
+	initiatorLogin := "test123"
+
+	mts := new(mock_task_storage.MockTaskStorage)
+	mm := new(mock_mail.MockMail)
+	ma := new(mock_auth.MockAuth)
+	logger, _ := zap.NewProduction()
+	taskIdUuid, err := uuid.FromString(taskId)
+	s.NoError(err, "bad task id provided for test")
+	srv := task.New(mts, mm, ma, logger.Sugar(), func() uuid.UUID {
+		return taskIdUuid
+	})
+
+	mts.On("GetTask", taskId).
+		Return(&models.Task{
+			ID:              taskId,
+			Logins:          logins,
+			ApprovalTokens:  approvalTokens,
+			Title:           title,
+			Description:     description,
+			InitiatorLogin:  initiatorLogin,
+			CurrApprovalNum: 2,
+			Status:          models.TaskInProgressStatus,
+		}, nil)
+
+	mm.On("SendResultMail",
+		models.ResultMail{
+			Destinations: logins,
+			TaskID:       taskId,
+			Result:       "task was cancelled",
+		}).
+		Return()
+
+	mts.On("UpdateTask",
+		&models.Task{
+			ID:              taskId,
+			Logins:          logins,
+			ApprovalTokens:  approvalTokens,
+			Title:           title,
+			Description:     description,
+			InitiatorLogin:  initiatorLogin,
+			CurrApprovalNum: 2,
+			Status:          models.TaskDeclinedStatus,
+		}).
+		Return(nil)
+
+	err = srv.ApproveOrDecline(
+		context.Background(),
+		taskId,
+		approvalTokens[2],
+		"decline",
+	)
+
+	s.Nil(err, "error must be nil")
+
+	mts.AssertExpectations(s.T())
+	mm.AssertExpectations(s.T())
+	ma.AssertExpectations(s.T())
+}
+
+func (s *unitTestSuite) TestApproveOrDeclineGetTaskErr() {
+	taskId := "1dea04bf-fd0c-48e0-9032-6ad3ddaea5af"
+	approvalTokens := []string{
+		s.generateToken(taskId, "MyLogin1"),
+		s.generateToken(taskId, "MyLogin2"),
+		s.generateToken(taskId, "MyLogin3"),
+		s.generateToken(taskId, "MyLogin4"),
+	}
+
+	mts := new(mock_task_storage.MockTaskStorage)
+	mm := new(mock_mail.MockMail)
+	ma := new(mock_auth.MockAuth)
+	logger, _ := zap.NewProduction()
+	taskIdUuid, err := uuid.FromString(taskId)
+	s.NoError(err, "bad task id provided for test")
+	srv := task.New(mts, mm, ma, logger.Sugar(), func() uuid.UUID {
+		return taskIdUuid
+	})
+
+	mts.On("GetTask", taskId).
+		Return(nil, fmt.Errorf("failed to get task"))
+
+	err = srv.ApproveOrDecline(
+		context.Background(),
+		taskId,
+		approvalTokens[2],
+		"approve",
+	)
+
+	s.NotNil(err, "error cannot be nil: get task failed")
+
+	mts.AssertExpectations(s.T())
+	mm.AssertExpectations(s.T())
+	ma.AssertExpectations(s.T())
+}
+
+func (s *unitTestSuite) TestApproveOrDeclineWrongTokenErr() {
+	taskId := "1dea04bf-fd0c-48e0-9032-6ad3ddaea5af"
+	logins := []string{
+		"MyLogin1",
+		"MyLogin2",
+		"MyLogin3",
+		"MyLogin4",
+	}
+	approvalTokens := []string{
+		s.generateToken(taskId, "MyLogin1"),
+		s.generateToken(taskId, "MyLogin2"),
+		s.generateToken(taskId, "MyLogin3"),
+		s.generateToken(taskId, "MyLogin4"),
+	}
+	title := "MyTask1"
+	description := "This task is important one too!"
+	initiatorLogin := "test123"
+	wrongToken := "1234567890"
+
+	mts := new(mock_task_storage.MockTaskStorage)
+	mm := new(mock_mail.MockMail)
+	ma := new(mock_auth.MockAuth)
+	logger, _ := zap.NewProduction()
+	taskIdUuid, err := uuid.FromString(taskId)
+	s.NoError(err, "bad task id provided for test")
+	srv := task.New(mts, mm, ma, logger.Sugar(), func() uuid.UUID {
+		return taskIdUuid
+	})
+
+	mts.On("GetTask", taskId).
+		Return(&models.Task{
+			ID:              taskId,
+			Logins:          logins,
+			ApprovalTokens:  approvalTokens,
+			Title:           title,
+			Description:     description,
+			InitiatorLogin:  initiatorLogin,
+			CurrApprovalNum: 2,
+			Status:          models.TaskInProgressStatus,
+		}, nil)
+
+	err = srv.ApproveOrDecline(
+		context.Background(),
+		taskId,
+		wrongToken,
+		"approve",
+	)
+
+	s.NotNil(err, "error cannot be nil: wrong token")
+
+	mts.AssertExpectations(s.T())
+	mm.AssertExpectations(s.T())
+	ma.AssertExpectations(s.T())
+}
+
+func (s *unitTestSuite) TestApproveOrDeclineInvalidDecisionOk() {
+	taskId := "1dea04bf-fd0c-48e0-9032-6ad3ddaea5af"
+	logins := []string{
+		"MyLogin1",
+		"MyLogin2",
+		"MyLogin3",
+		"MyLogin4",
+	}
+	approvalTokens := []string{
+		s.generateToken(taskId, "MyLogin1"),
+		s.generateToken(taskId, "MyLogin2"),
+		s.generateToken(taskId, "MyLogin3"),
+		s.generateToken(taskId, "MyLogin4"),
+	}
+	title := "MyTask1"
+	description := "This task is important one too!"
+	initiatorLogin := "test123"
+
+	mts := new(mock_task_storage.MockTaskStorage)
+	mm := new(mock_mail.MockMail)
+	ma := new(mock_auth.MockAuth)
+	logger, _ := zap.NewProduction()
+	taskIdUuid, err := uuid.FromString(taskId)
+	s.NoError(err, "bad task id provided for test")
+	srv := task.New(mts, mm, ma, logger.Sugar(), func() uuid.UUID {
+		return taskIdUuid
+	})
+
+	mts.On("GetTask", taskId).
+		Return(&models.Task{
+			ID:              taskId,
+			Logins:          logins,
+			ApprovalTokens:  approvalTokens,
+			Title:           title,
+			Description:     description,
+			InitiatorLogin:  initiatorLogin,
+			CurrApprovalNum: 2,
+			Status:          models.TaskInProgressStatus,
+		}, nil)
+
+	err = srv.ApproveOrDecline(
+		context.Background(),
+		taskId,
+		approvalTokens[2],
+		"approv",
+	)
+
+	s.NotNil(err, "error cannot be nil: invalid decision string")
+
+	mts.AssertExpectations(s.T())
+	mm.AssertExpectations(s.T())
+	ma.AssertExpectations(s.T())
+}
+
+func (s *unitTestSuite) TestApproveOrDeclineUpdateTaskErr() {
+	taskId := "1dea04bf-fd0c-48e0-9032-6ad3ddaea5af"
+	logins := []string{
+		"MyLogin1",
+		"MyLogin2",
+		"MyLogin3",
+		"MyLogin4",
+	}
+	approvalTokens := []string{
+		s.generateToken(taskId, "MyLogin1"),
+		s.generateToken(taskId, "MyLogin2"),
+		s.generateToken(taskId, "MyLogin3"),
+		s.generateToken(taskId, "MyLogin4"),
+	}
+	title := "MyTask1"
+	description := "This task is important one too!"
+	initiatorLogin := "test123"
+
+	mts := new(mock_task_storage.MockTaskStorage)
+	mm := new(mock_mail.MockMail)
+	ma := new(mock_auth.MockAuth)
+	logger, _ := zap.NewProduction()
+	taskIdUuid, err := uuid.FromString(taskId)
+	s.NoError(err, "bad task id provided for test")
+	srv := task.New(mts, mm, ma, logger.Sugar(), func() uuid.UUID {
+		return taskIdUuid
+	})
+
+	mts.On("GetTask", taskId).
+		Return(&models.Task{
+			ID:              taskId,
+			Logins:          logins,
+			ApprovalTokens:  approvalTokens,
+			Title:           title,
+			Description:     description,
+			InitiatorLogin:  initiatorLogin,
+			CurrApprovalNum: 2,
+			Status:          models.TaskInProgressStatus,
+		}, nil)
+
+	mm.On("SendApprovalMail",
+		models.MailToApproval{
+			Destination:  "MyLogin4",
+			ApprovalLink: s.generateApprovalLink(taskId, approvalTokens[3]),
+			DeclineLink:  s.generateDeclineLink(taskId, approvalTokens[3]),
+		}).
+		Return()
+
+	mts.On("UpdateTask",
+		&models.Task{
+			ID:              taskId,
+			Logins:          logins,
+			ApprovalTokens:  approvalTokens,
+			Title:           title,
+			Description:     description,
+			InitiatorLogin:  initiatorLogin,
+			CurrApprovalNum: 3,
+			Status:          models.TaskInProgressStatus,
+		}).
+		Return(fmt.Errorf("failed to update task"))
+
+	err = srv.ApproveOrDecline(
+		context.Background(),
+		taskId,
+		approvalTokens[2],
+		"approve",
+	)
+
+	s.NotNil(err, "error cannot be nil: failed to record changes to DB")
+
+	mts.AssertExpectations(s.T())
+	mm.AssertExpectations(s.T())
+	ma.AssertExpectations(s.T())
+}

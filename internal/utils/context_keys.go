@@ -17,3 +17,9 @@ type ctxKeyURL struct{}
 func CtxKeyURLGet() ctxKeyURL {
 	return ctxKeyURL{}
 }
+
+type ctxKeyUser struct{}
+
+func CtxKeyUserGet() ctxKeyUser {
+	return ctxKeyUser{}
+}

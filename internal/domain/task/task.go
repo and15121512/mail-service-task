@@ -195,16 +195,12 @@ func (s *Service) ApproveOrDecline(ctx context.Context, task_id string, token st
 	}
 
 	if decision == "approve" {
-		err = s.approve(ctx, task)
+		s.approve(ctx, task)
 	} else if decision == "decline" {
-		err = s.decline(ctx, task)
+		s.decline(ctx, task)
 	} else {
 		logger.Errorf("invalid decision value (expected 'approve' or 'decline')")
 		return fmt.Errorf("invalid decision value (expected 'approve' or 'decline')")
-	}
-	if err != nil {
-		logger.Errorf("failed to process approve/decline: %s", err.Error())
-		return fmt.Errorf("failed to process approve/decline: %s", err.Error())
 	}
 
 	err = s.ts.UpdateTask(ctx, task)
@@ -216,7 +212,7 @@ func (s *Service) ApproveOrDecline(ctx context.Context, task_id string, token st
 	return nil
 }
 
-func (s *Service) approve(ctx context.Context, task *models.Task) error {
+func (s *Service) approve(ctx context.Context, task *models.Task) {
 	task.CurrApprovalNum++
 	if task.CurrApprovalNum >= len(task.Logins) {
 		task.Status = models.TaskDoneStatus
@@ -226,26 +222,21 @@ func (s *Service) approve(ctx context.Context, task *models.Task) error {
 			Result:       "task was done",
 		})
 	} else {
-		if len(task.Logins) == 0 {
-			return fmt.Errorf("logins array of the task %s is empty", task.ID)
-		}
 		s.m.SendApprovalMail(ctx, models.MailToApproval{
 			Destination:  task.Logins[task.CurrApprovalNum],
 			ApprovalLink: s.generateApprovalLink(task.ID, task.ApprovalTokens[task.CurrApprovalNum]),
 			DeclineLink:  s.generateDeclineLink(task.ID, task.ApprovalTokens[task.CurrApprovalNum]),
 		})
 	}
-	return nil
 }
 
-func (s *Service) decline(ctx context.Context, task *models.Task) error {
+func (s *Service) decline(ctx context.Context, task *models.Task) {
 	task.Status = models.TaskDeclinedStatus
 	s.m.SendResultMail(ctx, models.ResultMail{
 		Destinations: task.Logins,
 		TaskID:       task.ID,
 		Result:       "task was cancelled",
 	})
-	return nil
 }
 
 func (s *Service) generateToken(ctx context.Context, task_id string, login string) string {
