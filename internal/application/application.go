@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/TheZeroSlave/zapsentry"
+	"gitlab.com/sukharnikov.aa/mail-service-task/internal/adapters/analytics_grpc"
 	"gitlab.com/sukharnikov.aa/mail-service-task/internal/adapters/auth_grpc"
 	"gitlab.com/sukharnikov.aa/mail-service-task/internal/adapters/http"
 	"gitlab.com/sukharnikov.aa/mail-service-task/internal/adapters/mail"
@@ -68,8 +69,9 @@ func Start(ctx context.Context) {
 	//}
 	m := mail.New(logger.Sugar())
 	ac := auth_grpc.New(logger.Sugar())
+	an := analytics_grpc.New(logger.Sugar())
 
-	taskS := task.New(db, m, ac, logger.Sugar())
+	taskS := task.New(db, m, ac, an, logger.Sugar())
 
 	s, err = http.New(taskS, logger.Sugar())
 	if err != nil {

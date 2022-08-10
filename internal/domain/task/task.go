@@ -5,6 +5,7 @@ import (
 	"crypto/sha1"
 	"fmt"
 	"regexp"
+	"time"
 
 	uuid "github.com/satori/go.uuid"
 	"gitlab.com/sukharnikov.aa/mail-service-task/internal/config"
@@ -18,15 +19,17 @@ type Service struct {
 	ts       ports.TaskStorage
 	m        ports.Mail
 	ac       ports.Auth
+	an       ports.Analytics
 	logger   *zap.SugaredLogger
 	uuidFunc func() uuid.UUID
 }
 
-func New(ts ports.TaskStorage, m ports.Mail, ac ports.Auth, logger *zap.SugaredLogger, uuidFunc ...func() uuid.UUID) *Service {
+func New(ts ports.TaskStorage, m ports.Mail, ac ports.Auth, an ports.Analytics, logger *zap.SugaredLogger, uuidFunc ...func() uuid.UUID) *Service {
 	s := &Service{
 		ts:       ts,
 		m:        m,
 		ac:       ac,
+		an:       an,
 		logger:   logger,
 		uuidFunc: uuid.NewV4,
 	}
@@ -77,6 +80,18 @@ func (s *Service) CreateTask(ctx context.Context, task *models.Task) (*models.Ta
 		ApprovalLink: s.generateApprovalLink(newTask.ID, approvalTokens[0]),
 		DeclineLink:  s.generateDeclineLink(newTask.ID, approvalTokens[0]),
 	})
+
+	err = s.an.StoreEvent(ctx, &models.Event{
+		EventId: s.uuidFunc().String(),
+		TaskId:  newTask.ID,
+		Time:    time.Now(),
+		Type:    models.EventCreateType,
+		Status:  models.TaskInProgressStatus,
+	})
+	if err != nil {
+		logger.Errorf("failed to store event of create task with task ID %s", newTask.ID)
+		return &newTask, fmt.Errorf("failed to store event of create task with task ID %s", newTask.ID)
+	}
 
 	return &newTask, nil
 }
@@ -149,6 +164,19 @@ func (s *Service) UpdateTask(ctx context.Context, task *models.Task, user *model
 		ApprovalLink: s.generateApprovalLink(newTask.ID, approvalTokens[0]),
 		DeclineLink:  s.generateDeclineLink(newTask.ID, approvalTokens[0]),
 	})
+
+	err = s.an.StoreEvent(ctx, &models.Event{
+		EventId: s.uuidFunc().String(),
+		TaskId:  newTask.ID,
+		Time:    time.Now(),
+		Type:    models.EventUpdateType,
+		Status:  models.TaskInProgressStatus,
+	})
+	if err != nil {
+		logger.Errorf("failed to store event of update task with task ID %s", newTask.ID)
+		return fmt.Errorf("failed to store event of update task with task ID %s", newTask.ID)
+	}
+
 	return nil
 }
 
@@ -176,6 +204,18 @@ func (s *Service) DeleteTask(ctx context.Context, task_id string, user *models.U
 		TaskID:       task.ID,
 		Result:       "task was deleted",
 	})
+
+	err = s.an.StoreEvent(ctx, &models.Event{
+		EventId: s.uuidFunc().String(),
+		TaskId:  task_id,
+		Time:    time.Now(),
+		Type:    models.EventDeleteType,
+		Status:  models.TaskInProgressStatus,
+	})
+	if err != nil {
+		logger.Errorf("failed to store event of delete task with task ID %s", task_id)
+		return fmt.Errorf("failed to store event of delete task with task ID %s", task_id)
+	}
 
 	return nil
 }
@@ -207,6 +247,25 @@ func (s *Service) ApproveOrDecline(ctx context.Context, task_id string, token st
 	if err != nil {
 		logger.Errorf("failed to update task with task ID %s", task.ID)
 		return fmt.Errorf("failed to update task with task ID %s", task.ID)
+	}
+
+	var eventType models.EventType
+	switch decision {
+	case "approve":
+		eventType = models.EventApproveType
+	case "decline":
+		eventType = models.EventDeclineType
+	}
+	err = s.an.StoreEvent(ctx, &models.Event{
+		EventId: s.uuidFunc().String(),
+		TaskId:  task_id,
+		Time:    time.Now(),
+		Type:    eventType,
+		Status:  task.Status,
+	})
+	if err != nil {
+		logger.Errorf("failed to store event of delete task with task ID %s", task_id)
+		return fmt.Errorf("failed to store event of delete task with task ID %s", task_id)
 	}
 
 	return nil

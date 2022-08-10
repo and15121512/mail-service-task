@@ -18,8 +18,9 @@ type Config struct {
 		MongoPort string `yaml:"mongo_port"`
 	}
 	Hosts struct {
-		AuthHost  string `yaml:"auth_host"`
-		MongoHost string `yaml:"mongo_host"`
+		AuthHost      string `yaml:"auth_host"`
+		AnalyticsHost string `yaml:"analytics_host"`
+		MongoHost     string `yaml:"mongo_host"`
 	}
 }
 
