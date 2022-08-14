@@ -5,7 +5,8 @@ import (
 	"fmt"
 
 	"github.com/TheZeroSlave/zapsentry"
-	"gitlab.com/sukharnikov.aa/mail-service-task/internal/adapters/analytics_grpc"
+	"gitlab.com/sukharnikov.aa/mail-service-task/internal/adapters/analytics"
+	"gitlab.com/sukharnikov.aa/mail-service-task/internal/adapters/analytics/kafka_producer"
 	"gitlab.com/sukharnikov.aa/mail-service-task/internal/adapters/auth_grpc"
 	"gitlab.com/sukharnikov.aa/mail-service-task/internal/adapters/http"
 	"gitlab.com/sukharnikov.aa/mail-service-task/internal/adapters/mail"
@@ -69,7 +70,16 @@ func Start(ctx context.Context) {
 	//}
 	m := mail.New(logger.Sugar())
 	ac := auth_grpc.New(logger.Sugar())
-	an := analytics_grpc.New(logger.Sugar())
+	//an := analytics_grpc.New(logger.Sugar())
+
+	kafkaHost := config.GetConfig(logger.Sugar()).Hosts.KafkaHost
+	kafkaPort := config.GetConfig(logger.Sugar()).Ports.KafkaPort
+	kafkaBrokerString := fmt.Sprintf("%s:%s", kafkaHost, kafkaPort)
+	pr, err := kafka_producer.New([]string{kafkaBrokerString}, "task-event", logger.Sugar())
+	if err != nil {
+		logger.Sugar().Fatalf("failed to create kafka producer: %s", err)
+	}
+	an := analytics.New(logger.Sugar(), pr)
 
 	taskS := task.New(db, m, ac, an, logger.Sugar())
 

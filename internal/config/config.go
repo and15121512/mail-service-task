@@ -16,11 +16,13 @@ type Config struct {
 		HttpPort  string `yaml:"http_port"`
 		GrpcPort  string `yaml:"grpc_port"`
 		MongoPort string `yaml:"mongo_port"`
+		KafkaPort string `yaml:"kafka_port"`
 	}
 	Hosts struct {
 		AuthHost      string `yaml:"auth_host"`
 		AnalyticsHost string `yaml:"analytics_host"`
 		MongoHost     string `yaml:"mongo_host"`
+		KafkaHost     string `yaml:"kafka_host"`
 	}
 }
 

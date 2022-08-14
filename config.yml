@@ -7,7 +7,9 @@ ports:
   http_port: 3000 # If 0 then automatic port selection
   grpc_port: 4000 # If 0 then automatic port selection
   mongo_port: 27017
+  kafka_port: 9092
 hosts:
   auth_host: mail-service-auth
   analytics_host: mail-service-analytics
   mongo_host: mongo-db-task
+  kafka_host: kafka
